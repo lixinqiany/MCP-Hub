@@ -63,7 +63,7 @@ async def make_request(url: str, params: dict[str, Any]) -> dict[str, Any] | Non
             return None
 
 @mcp.tool()
-async def get_forecast(city: str) -> str:
+async def get_forecast(city: str) -> list[dict[str, Any]]:
     """Get weather forecast for a city in China. You should type in Chinese.
 
     Args:
@@ -87,8 +87,8 @@ async def get_forecast(city: str) -> str:
     if "forecasts" not in forecast_data or len(forecast_data["forecasts"]) == 0:
         # TODO: I am not sure how to judge if I get the forecast data. Waiting for such a case.
         return "There is no forecast data for this city"
-
-    return forecast_data["forecasts"]
+    
+    return forecast_data["forecasts"][0]['casts']
 
 def get_adcode_by_city(city: str) -> str:
     """Get the adcode of a city in China.
@@ -101,6 +101,43 @@ def get_adcode_by_city(city: str) -> str:
         raise NotFound(f"City {city} not found in 高德 database. Maybe there is a typo, Or Maybe city name is not ending with 省/市/区.")
     return adcode.values[0]
 
+@mcp.tool()
+async def get_realtime_weather(city: str) -> dict[str, Any]:
+    """Get realtime weather info. for a city in China.
+
+    Args:
+        city: City name in Chinese. It supports Country, Province, City, District e.g. 浙江省, 杭州市, 萧山区...
+    """
+    
+    try:
+        adcode = get_adcode_by_city(city)
+        realtime_weather_params = {
+            "key": API_KEY,
+            "city": adcode,
+            "extensions": "base", # base means realtime info.
+            "output": "JSON"
+        }
+        realtime_weather_data = await make_request(API_BASE, realtime_weather_params)
+    except NotFound as e:
+        return e.message
+
+    if "lives" not in realtime_weather_data or len(realtime_weather_data["lives"]) == 0:
+        # TODO: I am not sure how to judge if I get the realtime data. Waiting for such a case.
+        return "There is no realtime weather data for this city"
+
+    return realtime_weather_data["lives"][0]
+
 if __name__ == "__main__":
-    result = asyncio.run(get_forecast("杭州市"))
-    print(result)
+    # Initialize and run the server
+    mcp.run(transport='streamable-http')
+    
+    {
+  "method": "notifications/message",
+  "params": {
+    "level": "info",
+    "logger": "stdio",
+    "data": {
+      "message": "File not found: C:\\Users\\lixinqiany\\Desktop\\Projects\\MCP-Hub\\server\\.weather.py"
+    }
+  }
+}
