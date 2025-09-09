@@ -1,4 +1,0 @@
-2025-09-09 18:59:57 - httpx - INFO - HTTP Request: GET https://restapi.amap.com/v3/weather/weatherInfo?key=1239f8d61a0eafd9d7828251c11e04ad&city=330100&extensions=all&output=JSON "HTTP/1.1 200 OK"
-2025-09-09 19:00:00 - httpx - INFO - HTTP Request: GET https://restapi.amap.com/v3/weather/weatherInfo?key=1239f8d61a0eafd9d7828251c11e04ad&city=330100&extensions=all&output=JSON "HTTP/1.1 200 OK"
-2025-09-09 19:04:19 - httpx - INFO - HTTP Request: GET https://restapi.amap.com/v3/weather/weatherInfo?key=1239f8d61a0eafd9d7828251c11e04ad&city=330100&extensions=all&output=JSON "HTTP/1.1 200 OK"
-2025-09-09 19:04:25 - httpx - INFO - HTTP Request: GET https://restapi.amap.com/v3/weather/weatherInfo?key=1239f8d61a0eafd9d7828251c11e04ad&city=330100&extensions=all&output=JSON "HTTP/1.1 200 OK"
