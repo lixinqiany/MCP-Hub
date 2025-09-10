@@ -130,14 +130,3 @@ async def get_realtime_weather(city: str) -> dict[str, Any]:
 if __name__ == "__main__":
     # Initialize and run the server
     mcp.run(transport='streamable-http')
-    
-    {
-  "method": "notifications/message",
-  "params": {
-    "level": "info",
-    "logger": "stdio",
-    "data": {
-      "message": "File not found: C:\\Users\\lixinqiany\\Desktop\\Projects\\MCP-Hub\\server\\.weather.py"
-    }
-  }
-}
