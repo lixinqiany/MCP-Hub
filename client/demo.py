@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 import os
 import logging
 import json
+import sys
 from openai import OpenAI
 from openai.types.model import Model
 from mcp.types import Tool
@@ -79,7 +80,7 @@ class MCPClient:
     
     async def process_query(self, query: str) -> str:
         """Process a query using OpenAI and available tools"""
-
+        is_function_call = False
         available_tools = [{
             "type": "function",
             "name": tool.name,
@@ -114,13 +115,14 @@ class MCPClient:
         assistant_message_content = []
         for content in response.output:
             if content.type == "message":
-                final_text.append(content.text)
+                final_text.append(content.content)
                 assistant_message_content.append(content)
             elif content.type == 'function_call':
                 tool_name = content.name
                 tool_args = json.loads(content.arguments)
 
                 # Execute tool call
+                is_function_call = True
                 result = await self.session.call_tool(tool_name, tool_args)
                 final_text.append(f"[Calling tool {tool_name} with args {tool_args}]")
                 logger.info(f"Calling tool {tool_name} and get -> \n{result.structuredContent}")
@@ -135,18 +137,38 @@ class MCPClient:
                         result.structuredContent
                     )
                 })
-
-        # Get next response from OpenAI
-        response = self.openai.responses.create(
-            model="gpt-4.1",
-            input=messages,
-            tools=available_tools,
-            instructions=instructions
-        )
+                
+        if is_function_call:
+            # Get next response from OpenAI
+            response = self.openai.responses.create(
+                model="gpt-4.1",
+                input=messages,
+                tools=available_tools,
+                instructions=instructions
+            )
+            is_function_call = False
         
         final_text = "\n".join(final_text)+response.output_text
 
         return final_text
+    
+    async def chat(self):
+        """Run an interactive chat loop"""
+        print("\nMCP Client Started!")
+        print("Type your queries or 'quit' to exit.")
+
+        while True:
+            try:
+                query = input("\nQuery: ").strip()
+
+                if query.lower() == 'quit':
+                    break
+
+                response = await self.process_query(query)
+                print("\n" + response)
+
+            except Exception as e:
+                print(f"\nError: {str(e)}")
     
     async def __aenter__(self):
         """Async context manager entry"""
@@ -161,6 +183,11 @@ async def main():
     async with MCPClient() as client:
         await client.connect_to_server("http://localhost:8000/mcp")
         print(await client.process_query("今天杭州的天气怎么样？"))
+        
+async def main():
+    async with MCPClient() as client:
+        await client.connect_to_server("http://localhost:8000/mcp")
+        await client.chat()
     
 if __name__ == "__main__":
     asyncio.run(main())
