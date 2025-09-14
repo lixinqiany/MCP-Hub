@@ -9,9 +9,10 @@ import os
 import logging
 import json
 import sys
-from openai import OpenAI
+from openai import NOT_GIVEN, OpenAI
 from openai.types.model import Model
 from mcp.types import Tool
+from typing import Literal
 
 load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))  # load environment variables from .env
 
@@ -170,6 +171,21 @@ class MCPClient:
             except Exception as e:
                 print(f"\nError: {str(e)}")
     
+    def make_request2openai(self, 
+                            messages: list[dict],
+                            system_prompt: str,
+                            tools: list[Tool] | NOT_GIVEN = NOT_GIVEN,
+                            model: str="gpt-4.1") -> str:
+        """Make a request to the OpenAI API"""
+        params = {
+            "model": model,
+            "input": messages,
+            "instructions": system_prompt,
+            "tools": tools,
+        }
+        response = self.openai.responses.create(**params)
+        return response
+    
     async def __aenter__(self):
         """Async context manager entry"""
         return self
@@ -178,11 +194,6 @@ class MCPClient:
         """Async context manager exit"""
         self.session = None
         await self.exit_stack.aclose()
-    
-async def main():
-    async with MCPClient() as client:
-        await client.connect_to_server("http://localhost:8000/mcp")
-        print(await client.process_query("今天杭州的天气怎么样？"))
         
 async def main():
     async with MCPClient() as client:
