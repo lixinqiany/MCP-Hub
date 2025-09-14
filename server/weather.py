@@ -130,7 +130,7 @@ async def get_realtime_weather(city: str) -> dict[str, Any]:
     return realtime_weather_data["lives"][0]
 
 @mcp.tool()
-def get_date_info(offset: int = 0) -> dict:
+def get_date_info(offset: int = 0) -> dict[str, Any]:
     """Get date information with optional offset from today
     
     Args:

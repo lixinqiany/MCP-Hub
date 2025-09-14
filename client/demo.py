@@ -222,10 +222,11 @@ class MCPClient:
                                             content: ResponseFunctionToolCall,
                                             mcp_result: CallToolResult) -> dict:
         """ convert the openai function call output to an input item for next round """
+        result = mcp_result.structuredContent if mcp_result.structuredContent is not None else mcp_result.content
         return {
             "type": "function_call_output",
             "call_id": content.call_id,
-            "output": json.dumps(mcp_result.structuredContent)
+            "output": json.dumps(result)
         }
         
     async def __aenter__(self):
