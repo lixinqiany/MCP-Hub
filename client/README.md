@@ -4,7 +4,17 @@
 
 - `string`: 直接将用户query以文本字符串形式传递
 - `input item list (array)`:
-  - `Input message`: type固定是message，role可以是developer/system，user或者assistant，content可以是一个string或者一个array。当content是array时的格式要求应该是
+  - `Input message`: type固定是message，role可以是developer/system，user或者assistant，content可以是一个string或者一个array。当content是array时的格式要求应该是以下json中的一种：
+```json
+{
+	"type": "xxx",
+	"role": "xxx",
+	"content": [
+		{"type": "input_text", "text": "xxx"},
+		{"type":"imput_image","detail": "图片高清程度", "image_url": "xxx"}
+	]
+}
+```
 
 
 ## OpenAI Response Obejct

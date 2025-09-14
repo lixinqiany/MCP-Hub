@@ -11,8 +11,9 @@ import json
 import sys
 from openai import NOT_GIVEN, OpenAI
 from openai.types.model import Model
-from mcp.types import Tool
+from mcp.types import Tool, CallToolResult
 from typing import Literal
+from openai.types.responses import ResponseFunctionToolCall
 
 load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))  # load environment variables from .env
 
@@ -79,102 +80,103 @@ class MCPClient:
         response = await self.session.list_tools()
         return response.tools
     
-    async def process_query(self, query: str) -> str:
+    async def process_query(self, 
+                            query: str | None,
+                            instructions: str,
+                            messages: list[dict]) -> tuple[list[str], list[dict], bool]:
         """Process a query using OpenAI and available tools"""
-        is_function_call = False
-        available_tools = [{
-            "type": "function",
-            "name": tool.name,
-            "description": tool.description,
-            "parameters": {
-                "type": "object",
-                "properties": tool.inputSchema["properties"]
-            }
-        } for tool in self.tools]
-        
-        # system prompt
-        instructions = '''You are a Chinese weather assistant. You can use available tools to improve the accuracy of your response. 
-        Finally, you should reply in Chinese in future.'''
-        messages = [
-            {
-                "role": "user",
-                "content": query
-            }
-        ]
+        available_tools = self.convert2openai_tool(self.tools)
 
         # send a openai api call
-        response = self.openai.responses.create(
-            model="gpt-4.1",
-            input=messages,
-            tools=available_tools,
-            instructions=instructions
-        )
+        if query is not None:
+            messages.append({
+                "role": "user",
+                "content": query
+            })
+        response = self.make_request2openai(messages, instructions, available_tools, "gpt-4.1")
 
         # Process response and handle tool calls
         final_text = []
+        has_tool_calls = False
 
         assistant_message_content = []
         for content in response.output:
             if content.type == "message":
-                final_text.append(content.content)
+                output_text = self.parse_openai_message(content.content)
+                final_text.append(output_text)
+                # 无需为模型的message类型输出专门去转换成下一轮对话的输入，输出格式和input item一致
                 assistant_message_content.append(content)
             elif content.type == 'function_call':
-                tool_name = content.name
-                tool_args = json.loads(content.arguments)
+                has_tool_calls = True
+                tool_name, tool_args = self.parse_openai_function_call(content)
 
                 # Execute tool call
-                is_function_call = True
-                result = await self.session.call_tool(tool_name, tool_args)
-                final_text.append(f"[Calling tool {tool_name} with args {tool_args}]")
-                logger.info(f"Calling tool {tool_name} and get -> \n{result.structuredContent}")
+                try:
+                    mcp_result = await self.session.call_tool(tool_name, tool_args)
+                    final_text.append(f"正在调用工具 {tool_name}，参数: {tool_args}")
+                    logger.info(f"Calling tool {tool_name} with args {tool_args} -> \n{mcp_result.structuredContent}")
 
-                assistant_message_content.append(content)
-                messages += assistant_message_content
-                
-                messages.append({
-                    "type": "function_call_output",
-                    "call_id": content.call_id,
-                    "output": json.dumps(
-                        result.structuredContent
-                    )
-                })
-                
-        if is_function_call:
-            # Get next response from OpenAI
-            response = self.openai.responses.create(
-                model="gpt-4.1",
-                input=messages,
-                tools=available_tools,
-                instructions=instructions
-            )
-            is_function_call = False
-        
-        final_text = "\n".join(final_text)+response.output_text
+                    function_call_output = self.convert2openai_function_call_output(content, mcp_result)
+                    assistant_message_content.append(content)
+                    assistant_message_content.append(function_call_output)
+                except Exception as e:
+                    logger.error(f"Tool call failed: {e}")
+                    final_text.append(f"工具调用失败: {e}")
+                    # 创建错误响应
+                    error_output = {
+                        "type": "function_call_output",
+                        "call_id": content.call_id,
+                        "output": json.dumps({"error": str(e)})
+                    }
+                    assistant_message_content.append(content)
+                    assistant_message_content.append(error_output)
 
-        return final_text
+        return final_text, messages + assistant_message_content, has_tool_calls
     
     async def chat(self):
         """Run an interactive chat loop"""
         print("\nMCP Client Started!")
         print("Type your queries or 'quit' to exit.")
-
+        
+        # system prompt
+        instructions = '''You are a Chinese weather assistant. You can use available tools to improve the accuracy of your response. 
+        Finally, you should reply in Chinese in future.'''
+        
+        messages = []
         while True:
             try:
-                query = input("\nQuery: ").strip()
+                query = input("\033[1;30;47m \nQuery: \033[0m").strip()
 
                 if query.lower() == 'quit':
                     break
 
-                response = await self.process_query(query)
-                print("\n" + response)
+                # 处理用户查询，可能需要多轮工具调用
+                max_try = 5  # 最大重试次数
+                current_try = 0
+                
+                while current_try < max_try:
+                    output_text, messages, has_tool_calls = await self.process_query(query, instructions, messages)
+                    
+                    if has_tool_calls:
+                        # 有工具调用，显示工具调用信息但不等待用户输入
+                        print("\033[1;31m" + '\n'.join(output_text) + "\033[0m")
+                        current_try += 1
+                        query = ""  # 清空query，下一轮不需要用户输入
+                    else:
+                        # 没有工具调用，显示最终结果并跳出循环
+                        print("\033[1;32m" + '\n'.join(output_text) + "\033[0m")
+                        break
+                
+                if current_try >= max_try:
+                    print(f"\033[1;31;41m工具调用次数超过{max_try}次，请重新开始对话。\033[0m")
 
             except Exception as e:
-                print(f"\nError: {str(e)}")
+                print(e)
     
     def make_request2openai(self, 
                             messages: list[dict],
                             system_prompt: str,
-                            tools: list[Tool] | NOT_GIVEN = NOT_GIVEN,
+                            tools: list[Tool] | None = None,
                             model: str="gpt-4.1") -> str:
         """Make a request to the OpenAI API"""
         params = {
@@ -186,6 +188,46 @@ class MCPClient:
         response = self.openai.responses.create(**params)
         return response
     
+    def convert2openai_tool(self, tools: list[Tool]) -> dict:
+        """Convert a MCP tool list to an OpenAI tool list"""
+        available_tools = [{
+            "type": "function",
+            "name": tool.name,
+            "description": tool.description,
+            "parameters": {
+                "type": "object",
+                "properties": tool.inputSchema["properties"]
+            }
+        } for tool in tools]
+        return available_tools
+    
+    def parse_openai_message(self, content: list) -> str:
+        """ parse the openai text response 
+        无需为模型的message类型输出专门去转换成下一轮对话的输入，输出格式和input item一致
+        """
+        results = ""
+        for item in content:
+            results += item.text
+        
+        return results
+        
+    def parse_openai_function_call(self, content: list) -> str:
+        """ parse the openai function call response """
+        tool_name = content.name
+        tool_args = json.loads(content.arguments)
+        
+        return tool_name, tool_args
+    
+    def convert2openai_function_call_output(self, 
+                                            content: ResponseFunctionToolCall,
+                                            mcp_result: CallToolResult) -> dict:
+        """ convert the openai function call output to an input item for next round """
+        return {
+            "type": "function_call_output",
+            "call_id": content.call_id,
+            "output": json.dumps(mcp_result.structuredContent)
+        }
+        
     async def __aenter__(self):
         """Async context manager entry"""
         return self
