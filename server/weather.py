@@ -7,6 +7,7 @@ from datetime import datetime
 from mcp.server.fastmcp import FastMCP
 from exception.NotFound import NotFound
 import asyncio
+from datetime import datetime, timedelta
 
 logs_dir = os.path.join(os.path.dirname(__file__), "logs")
 os.makedirs(logs_dir, exist_ok=True)
@@ -65,6 +66,7 @@ async def make_request(url: str, params: dict[str, Any]) -> dict[str, Any] | Non
 @mcp.tool()
 async def get_forecast(city: str) -> list[dict[str, Any]]:
     """Get weather forecast for a city in China. You should type in Chinese.
+    you may retrieve recent days' weather forecast, but it may not include the date you want.
 
     Args:
         city: City name in Chinese. It supports Country, Province, City, District e.g. 浙江省, 杭州市, 萧山区...
@@ -126,6 +128,34 @@ async def get_realtime_weather(city: str) -> dict[str, Any]:
         return "There is no realtime weather data for this city"
 
     return realtime_weather_data["lives"][0]
+
+@mcp.tool()
+def get_date_info(offset: int = 0) -> dict:
+    """Get date information with optional offset from today
+    
+    Args:
+        offset: Number of days offset from today (0=today, 1=tomorrow, -1=yesterday, etc.)
+    """
+    
+    # Calculate target date
+    target_date = datetime.now() + timedelta(days=offset)
+    
+    # Get weekday information
+    weekdays_english = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    
+    weekday_english = weekdays_english[target_date.weekday()]
+    
+    # Format date based on format_type
+    formatted_date = target_date.strftime("%Y年%m月%d日")
+    
+    return {
+        "date": formatted_date,
+        "weekday": weekday_english,
+        "year": target_date.year,
+        "month": target_date.month,
+        "day": target_date.day,
+        "timestamp": target_date.timestamp(),
+    }
 
 if __name__ == "__main__":
     # Initialize and run the server
