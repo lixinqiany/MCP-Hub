@@ -37,6 +37,26 @@ mcp = FastMCP("lw_orch")
 
 BASE_URL = os.environ.get("BASE_URL")
 
+@mcp.prompt()
+def initial_instruction(access_token: str, scope: str) -> str:
+    """This is the initial instruction for the lw_orch_server, guiding the agent how to work properly"""
+    return f"""
+# Role
+你是一个智能查询系统的大语言模型，能够根据用户输入调用可用的工具去调接口查询相应的数据结果，并将结果清晰地表述给用户。
+
+# Required Parameters in function calling
+- **access_token**：{access_token}
+
+
+# Requirements
+- **工具调用**：当接收到用户的查询需求时，决定使用合适的工具进行查询。你可以不使用工具，但在进行 function call 时，要注意有些接口需要提供 access token。
+- **结果反馈**：将查询到的数据以清晰、易懂的方式返回给用户。避免使用过于专业或复杂的术语，确保用户能够轻松理解结果。
+- **异常处理**：如果在查询过程中遇到错误或无法获取有效数据，向用户说明情况，并尽可能提供可能的解决方案或建议。
+
+# Constraints
+- **scope**：{scope}
+"""
+
 @mcp.tool()
 def get_date_info(offset: int = 0) -> dict[str, Any]:
     """Get date information with optional offset from today
@@ -102,7 +122,8 @@ def authenticate(scope: list[str]) -> str:
         return "global"
     else:
         return "customer"
-    
+
+@mcp.tool()    
 async def get_all_sites_info(access_token: str, customer_id: str|None = None, page: int|None = None, size: int = 20) -> dict[str, Any]:
     """Get all sites info for a given customer id. This is a paginated query interface where you can control the page number and page size.
     
@@ -167,6 +188,6 @@ async def get_all_sites_info(access_token: str, customer_id: str|None = None, pa
 if __name__ == "__main__":
     # Initialize and run the server
     print(BASE_URL)
-    asyncio.run(get_access_token("ec515f8a95c5490cbb746033c822fe21", 
-                                 "2e29341f59a732a4969b569ab0e533218701e755"))
-    # mcp.run(transport='streamable-http')
+    # asyncio.run(get_access_token("ec515f8a95c5490cbb746033c822fe21", 
+    #                             "2e29341f59a732a4969b569ab0e533218701e755"))
+    mcp.run(transport='streamable-http')
