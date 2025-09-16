@@ -76,7 +76,7 @@ async def get_access_token(client_id: str,
         grant_type: grant type, default is `client_credentials`
         
     Returns:
-        {'access_token': ..., 'token_type': ..., 'expires_in': 'how many seconds the token will be expired!', 'scope': '...'}
+        {'access_token': ..., 'token_type': ..., 'expires_in': 'how many seconds the token will be expired!', 'scope': 'authorized operation list for this token'}
     """
     
     async with httpx.AsyncClient() as client:
@@ -86,6 +86,83 @@ async def get_access_token(client_id: str,
         )
     
     return response.json()
+
+@mcp.tool() 
+def authenticate(scope: list[str]) -> str:
+    """Authenticate the user with the given scope. Because the global and customer token have different endpoints for future tools.
+    
+    Args:
+        scope: authorized operation list for this token. It should be the result of `get_access_token` tool.
+        
+    Returns:
+        a fixed value between [global, customer]
+    """
+    # TODO: 目前是一种快速的做法，如果scope中包含global，则返回global，否则返回customer。但是否是这样的逻辑仍有待确定。
+    if any(scope.startswith("global") for scope in scope):
+        return "global"
+    else:
+        return "customer"
+    
+async def get_all_sites_info(access_token: str, customer_id: str|None = None, page: int|None = None, size: int = 20) -> dict[str, Any]:
+    """Get all sites info for a given customer id. This is a paginated query interface where you can control the page number and page size.
+    
+    Args:
+        access_token: access token
+        customer_id: customer id
+        page: page number, default is None, which means all sites will be returned
+        size: page size
+    """
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+    }
+    result = {
+        "total_pages": 0,
+        "total_elements": 0,
+        "content": [],
+    }
+    async with httpx.AsyncClient() as client:
+        if page is None:
+            # 全量查询：循环获取所有页面
+            all_sites = []
+            current_page = 0
+            total_pages = None
+            
+            while True:
+                response = await client.get(
+                    f"{BASE_URL}/openapi/v2/sites",
+                    params={"page": current_page, "size": size},
+                    headers=headers
+                )
+                
+                data = response.json()
+                sites = data.get("content", [])
+                all_sites.extend(sites)
+                total_pages = data.get("total_pages", 0)
+                if current_page >= total_pages:
+                    break # break the loop if all pages have been queried
+                    
+                current_page += 1
+            
+            result["total_pages"] = total_pages
+            result["total_elements"] = data.get("total_elements", 0)
+            result["content"] = all_sites
+            
+            return result
+        else:
+            response = await client.get(
+                f"{BASE_URL}/openapi/v2/sites",
+                params={"page": page, "size": size},
+                headers=headers
+            )
+            
+            data = response.json()
+            result["total_pages"] = data.get("total_pages", 0)
+            result["total_elements"] = data.get("total_elements", 0)
+            result["content"] = data.get("content", [])
+            
+            return result
 
 if __name__ == "__main__":
     # Initialize and run the server
